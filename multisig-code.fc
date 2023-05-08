@@ -18,14 +18,16 @@ _ pack_state(cell pending_queries, cell owner_infos, int last_cleaned, int k, in
   .end_cell();
 }
 
-_ pack_owner_info(int public_key, int flood) inline_ref {
+_ pack_owner_info(int workchain_id, int account_id, int public_key, int flood) inline_ref {
   return begin_cell()
+    .store_int(workchain_id, 8)
+    .store_uint(account_id, 256)
     .store_uint(public_key, 256)
     .store_uint(flood, 8);
 }
 
 _ unpack_owner_info(slice cs) inline_ref {
-  return (cs~load_uint(256), cs~load_uint(8));
+  return (cs~load_int(8), cs~load_uint(256), cs~load_uint(256), cs~load_uint(8));
 }
 
 (int, int) check_signatures(cell public_keys, cell signatures, int hash, int cnt_bits) inline_ref {
@@ -69,8 +71,8 @@ _ unpack_owner_info(slice cs) inline_ref {
 
 (cell, ()) dec_flood(cell owner_infos, int creator_i) {
   (slice owner_info, var found?) = owner_infos.udict_get?(8, creator_i);
-  (int public_key, int flood) = unpack_owner_info(owner_info);
-  owner_infos~udict_set_builder(8, creator_i, pack_owner_info(public_key, flood - 1));
+  (int workchain_id, int account_id, int public_key, int flood) = unpack_owner_info(owner_info);
+  owner_infos~udict_set_builder(8, creator_i, pack_owner_info(workchain_id, account_id, public_key, flood - 1));
   return (owner_infos, ());
 }
 
@@ -129,7 +131,7 @@ _ unpack_owner_info(slice cs) inline_ref {
 
   (slice owner_info, var found?) = owner_infos.udict_get?(8, root_i);
   throw_unless(31, found?);
-  (int public_key, int flood) = unpack_owner_info(owner_info);
+  (int workchain_id, int account_id, int public_key, int flood) = unpack_owner_info(owner_info);
   throw_unless(32, check_signature(root_hash, root_signature, public_key));
 
   cell signatures = in_msg~load_dict();
@@ -164,7 +166,7 @@ _ unpack_owner_info(slice cs) inline_ref {
   set_gas_limit(100000);
 
   ifnot (found?) {
-    owner_infos~udict_set_builder(8, root_i, pack_owner_info(public_key, flood));
+    owner_infos~udict_set_builder(8, root_i, pack_owner_info(workchain_id, account_id, public_key, flood));
   }
 
   (pending_queries, owner_infos) = update_pending_queries(pending_queries, owner_infos, msg, query_id, creator_i, cnt, cnt_bits, n, k);
@@ -246,7 +248,6 @@ cell merge_list(cell a, cell b) {
   as~skip_last_bits(1);
   ;; as~skip_bits(1);
   return begin_cell().store_slice(as).store_dict(b).end_cell();
-
 }
 
 cell get_public_keys() method_id {
